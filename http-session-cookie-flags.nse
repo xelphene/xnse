@@ -3,6 +3,56 @@ local http = require('http')
 local shortport = require('shortport')
 local stdnse = require('stdnse')
 
+description = [[
+Examines cookies set by HTTP services.  Reports any session cookies set
+without the httponly flag.  Reports any session cookies set over SSL without
+the secure flag.  If http-enum.nse is also run, any interesting paths found
+by it will be checked in addition to the root.
+]]
+
+---
+-- @usage
+-- nmap -p 443 --script ssl-cert-intaddr <target>
+--
+-- @output
+-- 443/tcp open  https
+-- | http-session-cookie-flags: 
+-- |   /: 
+-- |     PHPSESSID: 
+-- |       secure flag not set and HTTPS in use
+-- |   /admin/: 
+-- |     session_id: 
+-- |       secure flag not set and HTTPS in use
+-- |       httponly flag not set
+-- |   /mail/: 
+-- |     ASPSESSIONIDASDF: 
+-- |       httponly flag not set
+-- |     ASP.NET_SessionId: 
+-- |_      secure flag not set and HTTPS in use
+--
+--@xmloutput
+-- <table key="/">
+-- <table key="PHPSESSID">
+-- <elem>secure flag not set and HTTPS in use</elem>
+-- </table>
+-- </table>
+-- <table key="/admin/">
+-- <table key="session_id">
+-- <elem>secure flag not set and HTTPS in use</elem>
+-- <elem>httponly flag not set</elem>
+-- </table>
+-- </table>
+-- <table key="/mail/">
+-- <table key="ASPSESSIONIDASDF">
+-- <elem>httponly flag not set</elem>
+-- </table>
+-- <table key="ASP.NET_SessionId">
+-- <elem>secure flag not set and HTTPS in use</elem>
+-- </table>
+-- </table>
+--
+-- @see http-enum.nse
+
 categories = { "default", "safe", "vuln" }
 author = "Steve Benson"
 license = "Same as Nmap--See https://nmap.org/book/man-legal.html"
@@ -10,20 +60,28 @@ dependencies = {"http-enum"}
 
 portrule = shortport.http
 
+-- a list of patterns indicating cookies which are likely session cookies
 local session_cookie_patterns = {
-	'PHPSESSID',
-	'[Ss][Ee][Ss][Ss][Ii][Oo][Nn][Ii][Dd]'
+	'^PHPSESSID$',
+	'^CFID$',
+	'^CFTOKEN$',
+	'^VOXSQSESS$',
+	'^FedAuth$',
+	'[Ss][Ee][Ss][Ss][Ii][Oo][Nn]_*[Ii][Dd]'
 }
 
-local is_session_cookie = function(cookieName)
+-- return true if a cookie with the given name is probably a session cookie.
+local is_session_cookie = function(cookie_name)
 	for _, pattern in ipairs(session_cookie_patterns) do
-		if string.find(cookieName, pattern) then
+		if string.find(cookie_name, pattern) then
 			return true
 		end
 	end
 	return false
 end
 
+-- check cookies set on a particular URL path. returns a table with problem
+-- cookie names mapped to a table listing each problem found.
 local check_path = function(host, port, path)
 	stdnse.debug1("start check of %s %s %s", host.ip, port.number, path)
 	local path_issues = stdnse.output_table()
