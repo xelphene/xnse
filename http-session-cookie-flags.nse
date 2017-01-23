@@ -62,77 +62,77 @@ portrule = shortport.http
 
 -- a list of patterns indicating cookies which are likely session cookies
 local session_cookie_patterns = {
-	'^PHPSESSID$',
-	'^CFID$',
-	'^CFTOKEN$',
-	'^VOXSQSESS$',
-	'^FedAuth$',
-	'[Ss][Ee][Ss][Ss][Ii][Oo][Nn]_*[Ii][Dd]'
+  '^PHPSESSID$',
+  '^CFID$',
+  '^CFTOKEN$',
+  '^VOXSQSESS$',
+  '^CAKEPHP$',
+  '^FedAuth$',
+  '[Ss][Ee][Ss][Ss][Ii][Oo][Nn]_*[Ii][Dd]'
 }
 
 -- return true if a cookie with the given name is probably a session cookie.
 local is_session_cookie = function(cookie_name)
-	for _, pattern in ipairs(session_cookie_patterns) do
-		if string.find(cookie_name, pattern) then
-			return true
-		end
-	end
-	return false
+  for _, pattern in ipairs(session_cookie_patterns) do
+    if string.find(cookie_name, pattern) then
+      return true
+    end
+  end
+  return false
 end
 
 -- check cookies set on a particular URL path. returns a table with problem
 -- cookie names mapped to a table listing each problem found.
 local check_path = function(host, port, path)
-	stdnse.debug1("start check of %s %s %s", host.ip, port.number, path)
-	local path_issues = stdnse.output_table()
-	local resp = http.get(host, port, path)
+  stdnse.debug1("start check of %s %s %s", host.ip, port.number, path)
+  local path_issues = stdnse.output_table()
+  local resp = http.get(host, port, path)
 
-	for _,cookie in ipairs(resp.cookies) do
-		stdnse.debug1('  cookie: %s', cookie.name)
-		local issues = stdnse.output_table()
-		if is_session_cookie(cookie.name) then
-			stdnse.debug1('    IS a session cookie')
-			if port.service=='https' and not cookie.secure then
-				stdnse.debug1('    * no secure flag and https')
-				issues[#issues+1] = 'secure flag not set and HTTPS in use'
-			end
-			if not cookie.httponly then
-				stdnse.debug1('    * no httponly')
-				issues[#issues+1] = 'httponly flag not set'
-			end
-		end
-		
-		if #issues>0 then
-			path_issues[cookie.name] = issues
-		end
-			
-	end
+  for _,cookie in ipairs(resp.cookies) do
+    stdnse.debug1('  cookie: %s', cookie.name)
+    local issues = stdnse.output_table()
+    if is_session_cookie(cookie.name) then
+      stdnse.debug1('    IS a session cookie')
+      if port.service=='https' and not cookie.secure then
+        stdnse.debug1('    * no secure flag and https')
+        issues[#issues+1] = 'secure flag not set and HTTPS in use'
+      end
+      if not cookie.httponly then
+        stdnse.debug1('    * no httponly')
+        issues[#issues+1] = 'httponly flag not set'
+      end
+    end
+    
+    if #issues>0 then
+      path_issues[cookie.name] = issues
+    end
+      
+  end
 
-	stdnse.debug1("end check of %s %s %s : %d issues found", host.ip, port.number, path, #path_issues)
-	if #path_issues>0 then
-		return path_issues
-	else
-		return nil
-	end
+  stdnse.debug1("end check of %s %s %s : %d issues found", host.ip, port.number, path, #path_issues)
+  if #path_issues>0 then
+    return path_issues
+  else
+    return nil
+  end
 end
 
 action = function(host, port)
-	local all_issues = stdnse.output_table()
+  local all_issues = stdnse.output_table()
 
-	all_issues['/'] = check_path(host, port, '/')
+  all_issues['/'] = check_path(host, port, '/')
 
-	-- check all interesting paths found by http-enum.nse if it was run
-	local all_pages = stdnse.registry_get({host.ip, 'www', port.number, 'all_pages'})
-	if all_pages then
-		for _,path in ipairs(all_pages) do
-			all_issues[path] = check_path(host, port, path)
-		end
-	end
+  -- check all interesting paths found by http-enum.nse if it was run
+  local all_pages = stdnse.registry_get({host.ip, 'www', port.number, 'all_pages'})
+  if all_pages then
+    for _,path in ipairs(all_pages) do
+      all_issues[path] = check_path(host, port, path)
+    end
+  end
 
-	if #all_issues>0 then
-		return all_issues
-	else
-		return nil
-	end
-	
+  if #all_issues>0 then
+    return all_issues
+  else
+    return nil
+  end
 end
