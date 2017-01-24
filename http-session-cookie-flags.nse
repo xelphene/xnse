@@ -68,6 +68,7 @@ local session_cookie_patterns = {
   '^VOXSQSESS$',
   '^CAKEPHP$',
   '^FedAuth$',
+  '^ASPXAUTH$',
   '[Ss][Ee][Ss][Ss][Ii][Oo][Nn]_*[Ii][Dd]'
 }
 
